@@ -506,7 +506,10 @@ export class LionInputFile extends ScopedElementsMixin(LocalizeMixin(LionField))
 
     const isDraggingMultipleWhileNotSupported =
       ev.dataTransfer && ev.dataTransfer.items.length > 1 && !this.multiple;
-    if (isDraggingMultipleWhileNotSupported || !ev.dataTransfer?.files) {
+    // Note that dropping content that is not a file (a text selection, a link, ...) results in an
+    // empty `files` list. Since an empty FileList is truthy, it needs to be checked on length:
+    // there is no user input to handle then, so it should be ignored completely.
+    if (isDraggingMultipleWhileNotSupported || !ev.dataTransfer?.files.length) {
       return;
     }
 
@@ -523,15 +526,18 @@ export class LionInputFile extends ScopedElementsMixin(LocalizeMixin(LionField))
     // Dropping files is user input as well, so (like the `change` flow does via
     // `_onUserInputChanged`) the resulting `model-value-changed` event is marked as such.
     this._isHandlingUserInput = true;
-    if (this.multiple) {
-      const computedFiles = this.__computeNewAddedFiles(
-        /** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files)),
-      );
-      this.modelValue = [...(this.modelValue ?? []), ...computedFiles];
-    } else {
-      this.modelValue = /** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files));
+    try {
+      if (this.multiple) {
+        const computedFiles = this.__computeNewAddedFiles(
+          /** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files)),
+        );
+        this.modelValue = [...(this.modelValue ?? []), ...computedFiles];
+      } else {
+        this.modelValue = /** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files));
+      }
+    } finally {
+      this._isHandlingUserInput = false;
     }
-    this._isHandlingUserInput = false;
 
     this._processFiles(/** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files)));
   }

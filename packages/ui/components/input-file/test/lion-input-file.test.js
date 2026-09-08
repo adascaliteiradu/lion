@@ -39,6 +39,23 @@ function mimicSelectFile(
   formControl._inputNode.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+/**
+ * Dispatches a real 'drop' event on the drop zone, so the `@drop` binding of the template is
+ * exercised as well. Note that `new DragEvent()` is not used, as it is not available in all
+ * browsers we support.
+ */
+function mimicDropFiles(
+  /** @type {LionInputFile} */ formControl,
+  /** @type {InputFile[]}  */ mockFiles,
+) {
+  const dataTransfer = new DataTransfer();
+  // @ts-ignore InputFile is a File
+  mockFiles.forEach(mockFile => dataTransfer.items.add(mockFile));
+  const dropEvent = new Event('drop', { bubbles: true, cancelable: true, composed: true });
+  Object.defineProperty(dropEvent, 'dataTransfer', { value: dataTransfer });
+  formControl.shadowRoot?.querySelector('.input-file__drop-zone')?.dispatchEvent(dropEvent);
+}
+
 const file = /** @type {InputFile} */ (
   new File(['foo'], 'foo.txt', {
     type: 'text/plain',
@@ -1125,10 +1142,7 @@ describe('lion-input-file', () => {
       // @ts-expect-error [allow-protected-in-test]
       await dropEl._processDroppedFiles({
         // @ts-ignore
-        dataTransfer: {
-          files: list.files,
-          items: [{ name: 'foo.txt' }, { name: 'bar.txt' }],
-        },
+        dataTransfer: { files: list.files, items: [{ name: 'foo.txt' }, { name: 'bar.txt' }] },
         preventDefault: () => {},
       });
       await dropEl.updateComplete;
@@ -1169,6 +1183,62 @@ describe('lion-input-file', () => {
       expect(el._selectedFilesMetaData.length).to.equal(1);
       expect(el.hasFeedbackFor).to.deep.equal(['info'], 'hasFeedbackFor');
       expect(el.showsFeedbackFor).to.deep.equal(['info'], 'showsFeedbackFor');
+    });
+
+    it('shows validation feedback when files are dropped on the drop zone', async () => {
+      mimicDropFiles(el, [file]);
+      await el.updateComplete;
+      await el.feedbackComplete;
+
+      expect(el.modelValue.length).to.equal(1);
+      expect(el.touched).to.be.true;
+      expect(el.dirty).to.be.true;
+
+      const duplicateFile = /** @type {InputFile} */ (
+        new File(['foo'], 'foo.txt', { type: 'text/plain' })
+      );
+      mimicDropFiles(el, [duplicateFile]);
+      await el.updateComplete;
+      await el.feedbackComplete;
+
+      expect(el.hasFeedbackFor).to.deep.equal(['info'], 'hasFeedbackFor');
+      expect(el.showsFeedbackFor).to.deep.equal(['info'], 'showsFeedbackFor');
+    });
+
+    it('does not set interaction states when the dropped content contains no files', async () => {
+      const dropEl = await fixture(html`
+        <lion-input-file
+          name="myFiles"
+          multiple
+          enable-drop-zone
+          .validators="${[new Required()]}"
+        ></lion-input-file>
+      `);
+      await dropEl.updateComplete;
+
+      // Dropping a text selection or a link results in an empty `files` list
+      mimicDropFiles(dropEl, []);
+      await dropEl.updateComplete;
+      await dropEl.feedbackComplete;
+
+      expect(dropEl.modelValue.length).to.equal(0);
+      expect(dropEl.touched).to.be.false;
+      expect(dropEl.dirty).to.be.false;
+      expect(dropEl.showsFeedbackFor).to.deep.equal([], 'showsFeedbackFor');
+    });
+
+    it('does not set interaction states when multiple files are dropped on a single file input', async () => {
+      const singleEl = await fixture(html`
+        <lion-input-file name="myFiles" enable-drop-zone></lion-input-file>
+      `);
+      await singleEl.updateComplete;
+
+      mimicDropFiles(singleEl, [file, file2]);
+      await singleEl.updateComplete;
+
+      expect(singleEl.modelValue.length).to.equal(0);
+      expect(singleEl.touched).to.be.false;
+      expect(singleEl.dirty).to.be.false;
     });
   });
 
