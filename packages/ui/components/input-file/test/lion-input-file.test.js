@@ -1,5 +1,5 @@
 import '@lion/ui/define/lion-input-file.js';
-import { Required } from '@lion/ui/form-core.js';
+import { Required, Validator } from '@lion/ui/form-core.js';
 import { getInputMembers } from '@lion/ui/input-test-helpers.js';
 import { getLocalizeManager } from '@lion/ui/localize-no-side-effects.js';
 import { localizeTearDown } from '@lion/ui/localize-test-helpers.js';
@@ -1049,6 +1049,126 @@ describe('lion-input-file', () => {
 
       expect(_processFilesSpy).have.been.calledOnce;
       _processFilesSpy.restore();
+    });
+
+    it('should set touched and dirty on drop', async () => {
+      expect(el.touched).to.be.false;
+      expect(el.dirty).to.be.false;
+
+      const list = new DataTransfer();
+      // @ts-ignore
+      list.items.add(file);
+
+      // @ts-expect-error [allow-protected-in-test]
+      await el._processDroppedFiles({
+        // @ts-ignore
+        dataTransfer: { files: list.files, items: [{ name: 'test.txt' }] },
+        preventDefault: () => {},
+      });
+      await el.updateComplete;
+
+      expect(el.touched).to.be.true;
+      expect(el.dirty).to.be.true;
+    });
+
+    it('should mark the model-value-changed event as triggered by user on drop', async () => {
+      const list = new DataTransfer();
+      // @ts-ignore
+      list.items.add(file);
+
+      const modelValueChangedSpy = sinon.spy();
+      el.addEventListener('model-value-changed', modelValueChangedSpy);
+
+      // @ts-expect-error [allow-protected-in-test]
+      await el._processDroppedFiles({
+        // @ts-ignore
+        dataTransfer: { files: list.files, items: [{ name: 'test.txt' }] },
+        preventDefault: () => {},
+      });
+      await el.updateComplete;
+
+      expect(modelValueChangedSpy).to.have.been.called;
+      expect(modelValueChangedSpy.lastCall.args[0].detail.isTriggeredByUser).to.be.true;
+    });
+
+    it('should show validation feedback on drop without requiring a blur', async () => {
+      class TooManyFiles extends Validator {
+        static get validatorName() {
+          return 'TooManyFiles';
+        }
+
+        /**
+         * @param {InputFile[]} modelValue
+         */
+        // eslint-disable-next-line class-methods-use-this
+        execute(modelValue) {
+          return modelValue.length > 1;
+        }
+      }
+
+      const dropEl = await fixture(html`
+        <lion-input-file
+          name="myFiles"
+          multiple
+          enable-drop-zone
+          .validators="${[new TooManyFiles(undefined, { getMessage: () => 'FooBar' })]}"
+        ></lion-input-file>
+      `);
+      await dropEl.updateComplete;
+
+      const list = new DataTransfer();
+      // @ts-ignore
+      list.items.add(file);
+      // @ts-ignore
+      list.items.add(file2);
+
+      // @ts-expect-error [allow-protected-in-test]
+      await dropEl._processDroppedFiles({
+        // @ts-ignore
+        dataTransfer: {
+          files: list.files,
+          items: [{ name: 'foo.txt' }, { name: 'bar.txt' }],
+        },
+        preventDefault: () => {},
+      });
+      await dropEl.updateComplete;
+      await dropEl.feedbackComplete;
+
+      // @ts-ignore input type="file" is a specific input member
+      const { _feedbackNode } = getInputMembers(dropEl);
+      expect(_feedbackNode.feedbackData?.[0].message).to.equal('FooBar');
+      expect(dropEl.showsFeedbackFor).to.deep.equal(['error'], 'showsFeedbackFor');
+    });
+
+    it('should show the duplicate file names message when the same file is dropped twice', async () => {
+      const list = new DataTransfer();
+      // @ts-ignore
+      list.items.add(file);
+
+      // @ts-expect-error [allow-protected-in-test]
+      await el._processDroppedFiles({
+        // @ts-ignore
+        dataTransfer: { files: list.files, items: [{ name: 'foo.txt' }] },
+        preventDefault: () => {},
+      });
+      await el.updateComplete;
+
+      const duplicateList = new DataTransfer();
+      // @ts-ignore
+      duplicateList.items.add(new File(['foo'], 'foo.txt', { type: 'text/plain' }));
+
+      // @ts-expect-error [allow-protected-in-test]
+      await el._processDroppedFiles({
+        // @ts-ignore
+        dataTransfer: { files: duplicateList.files, items: [{ name: 'foo.txt' }] },
+        preventDefault: () => {},
+      });
+      await el.updateComplete;
+
+      // @ts-expect-error [allow-protected-in-test]
+      expect(el._selectedFilesMetaData.length).to.equal(1);
+      expect(el.hasFeedbackFor).to.deep.equal(['info'], 'hasFeedbackFor');
+      expect(el.showsFeedbackFor).to.deep.equal(['info'], 'showsFeedbackFor');
     });
   });
 

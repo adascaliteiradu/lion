@@ -512,6 +512,17 @@ export class LionInputFile extends ScopedElementsMixin(LocalizeMixin(LionField))
 
     this._inputNode.files = ev.dataTransfer.files;
 
+    // Just like in `_onChange`, we take over the responsibility of InteractionStateMixin here:
+    // `_leaveEvent` ('blur') is not the best trigger in this case. Giving feedback right after the
+    // files are dropped results in best UX. Without this, validation feedback would stay hidden
+    // until the user blurs the component, since `_showFeedbackConditionFor` requires
+    // `touched && dirty`.
+    this.touched = true;
+    this.dirty = true;
+
+    // Dropping files is user input as well, so (like the `change` flow does via
+    // `_onUserInputChanged`) the resulting `model-value-changed` event is marked as such.
+    this._isHandlingUserInput = true;
     if (this.multiple) {
       const computedFiles = this.__computeNewAddedFiles(
         /** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files)),
@@ -520,6 +531,7 @@ export class LionInputFile extends ScopedElementsMixin(LocalizeMixin(LionField))
     } else {
       this.modelValue = /** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files));
     }
+    this._isHandlingUserInput = false;
 
     this._processFiles(/** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files)));
   }
