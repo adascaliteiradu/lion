@@ -512,6 +512,10 @@ export class LionInputFile extends ScopedElementsMixin(LocalizeMixin(LionField))
 
     this._inputNode.files = ev.dataTransfer.files;
 
+    this.touched = true;
+    this.dirty = true;
+
+    this._isHandlingUserInput = true;
     if (this.multiple) {
       const computedFiles = this.__computeNewAddedFiles(
         /** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files)),
@@ -520,6 +524,7 @@ export class LionInputFile extends ScopedElementsMixin(LocalizeMixin(LionField))
     } else {
       this.modelValue = /** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files));
     }
+    this._isHandlingUserInput = false;
 
     this._processFiles(/** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files)));
   }
