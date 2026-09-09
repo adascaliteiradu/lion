@@ -506,7 +506,7 @@ export class LionInputFile extends ScopedElementsMixin(LocalizeMixin(LionField))
 
     const isDraggingMultipleWhileNotSupported =
       ev.dataTransfer && ev.dataTransfer.items.length > 1 && !this.multiple;
-    if (isDraggingMultipleWhileNotSupported || !ev.dataTransfer?.files) {
+    if (isDraggingMultipleWhileNotSupported || !ev.dataTransfer?.files.length) {
       return;
     }
 
@@ -516,15 +516,18 @@ export class LionInputFile extends ScopedElementsMixin(LocalizeMixin(LionField))
     this.dirty = true;
 
     this._isHandlingUserInput = true;
-    if (this.multiple) {
-      const computedFiles = this.__computeNewAddedFiles(
-        /** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files)),
-      );
-      this.modelValue = [...(this.modelValue ?? []), ...computedFiles];
-    } else {
-      this.modelValue = /** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files));
+    try {
+      if (this.multiple) {
+        const computedFiles = this.__computeNewAddedFiles(
+          /** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files)),
+        );
+        this.modelValue = [...(this.modelValue ?? []), ...computedFiles];
+      } else {
+        this.modelValue = /** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files));
+      }
+    } finally {
+      this._isHandlingUserInput = false;
     }
-    this._isHandlingUserInput = false;
 
     this._processFiles(/** @type {InputFile[]} */ (Array.from(ev.dataTransfer.files)));
   }
